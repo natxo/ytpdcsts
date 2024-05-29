@@ -1,0 +1,244 @@
+package main
+
+import (
+	"encoding/xml"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+
+	"gopkg.in/yaml.v3"
+)
+
+const ytxmlurl = "https://www.youtube.com/feeds/videos.xml?channel_id="
+
+type Channels2follow struct {
+	Ytchannels []struct {
+		Name      string `yaml:"name"`
+		Channelid string `yaml:"channelid"`
+		Link      string `yaml:"link"`
+		Language  string `yaml:"language"`
+	} `yaml:"ytchannels"`
+}
+
+func main() {
+	urls, err := loadpodcastsfile("podcasts.yaml")
+	if err != nil {
+		log.Fatalln("could not load the podcast file: ", err)
+	}
+
+	for _, item := range urls {
+		var pdcsts []Podcastitem
+		ytfeed, err := loadxml(item)
+		if err != nil {
+			log.Fatalln("could not load the xml for ", ytfeed.Author.Name, ": ", err)
+		}
+		ytpdcsts := ytpodcastitems(ytfeed)
+
+		filefeed, err := readshowyaml(ytfeed.Author.Name)
+		if err != nil {
+			log.Fatalln("could not read ", ytfeed.Author.Name, err)
+		}
+		pdcsts = append(pdcsts, ytpdcsts...)
+		pdcsts = append(pdcsts, filefeed...)
+
+		keys := make(map[string]bool)
+		var uniq []Podcastitem
+		for _, item := range pdcsts {
+			if _, value := keys[item.Published]; !value {
+				keys[item.Published] = true
+				uniq = append(uniq, item)
+			}
+		}
+		writeshowyaml(ytfeed.Author.Name, uniq)
+	}
+}
+
+// load podcasts.yaml, return the channel id urls
+func loadpodcastsfile(file string) (urls []string, err error) {
+	pdcfile, err := os.ReadFile("podcasts.yaml")
+	if err != nil {
+		panic("could not read podcasts.yaml")
+	}
+
+	var podcasts Channels2follow
+
+	err = yaml.Unmarshal(pdcfile, &podcasts)
+	if err != nil {
+		panic("could not unmarshal podcasts.yaml")
+	}
+
+	for _, value := range podcasts.Ytchannels {
+		urls = append(urls, ytxmlurl+value.Channelid)
+	}
+	return urls, nil
+}
+
+// does the magic,
+func loadxml(url string) (feed Feed, err error) {
+	var result Feed
+	fmt.Println(url)
+	if xmlBytes, err := getXML(url); err != nil {
+		log.Fatalf("Failed to get XML: %v", err)
+	} else {
+		err := xml.Unmarshal(xmlBytes, &result)
+		if err != nil {
+			return result, err
+			//writeshowyaml(result.Author.Name, result)
+		}
+		return result, nil
+	}
+
+	return result, nil
+}
+
+// load xml doc from url, returns []byte and error
+func getXML(url string) ([]byte, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return []byte{}, fmt.Errorf("GET error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return []byte{}, fmt.Errorf("Status error: %v", resp.StatusCode)
+	}
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return []byte{}, fmt.Errorf("Read body: %v", err)
+	}
+
+	return data, nil
+}
+
+func readshowyaml(show string) (pdcs []Podcastitem, err error) {
+	f, err := os.ReadFile(show + ".yaml")
+	if err != nil {
+		log.Fatalln("could not read file ", show+".yaml", err)
+	}
+	err = yaml.Unmarshal(f, &pdcs)
+
+	if err != nil {
+		log.Fatalln("could not unmarshal ", show+".yaml", err)
+	}
+	return pdcs, nil
+
+}
+
+// extract []Podcastitem from Feed, yt only gives us the last 15
+func ytpodcastitems(feed Feed) []Podcastitem {
+	var pdcstitems []Podcastitem
+	// fill ytshowitems with data
+	for i := 0; i < len(feed.Entry); i++ {
+		item := Podcastitem{
+			Title:     feed.Entry[i].Title,
+			Published: feed.Entry[i].Published,
+			Link:      feed.Entry[i].Link.Href,
+		}
+		pdcstitems = append(pdcstitems, item)
+	}
+	return pdcstitems
+}
+
+// writes the feed info to a yaml file/poorman's db
+// here we save the older we already go and the newest 15 from the yt xml feed
+func writeshowyaml(show string, pdcsts []Podcastitem) error {
+	f, err := os.OpenFile(show+".yaml", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0600)
+	if err != nil {
+		log.Fatalln("could not create or truncate file", show+".yaml", err)
+	}
+	fmt.Println(f.Name())
+	defer f.Close()
+
+	data, err := yaml.Marshal(&pdcsts)
+	if err != nil {
+		log.Fatalln("error marshaling items into show yaml")
+	}
+
+	_, err = f.Write(data)
+	if err != nil {
+		log.Fatalln("error writing show yaml file")
+	}
+	return nil
+}
+
+type Podcastitem struct {
+	Title     string `yaml:"title"`
+	Published string `yaml:"published"`
+	Link      string `yaml:"link"`
+}
+
+type Feed struct {
+	XMLName xml.Name `xml:"feed"`
+	Text    string   `xml:",chardata"`
+	Yt      string   `xml:"yt,attr"`
+	Media   string   `xml:"media,attr"`
+	Xmlns   string   `xml:"xmlns,attr"`
+	Link    []struct {
+		Text string `xml:",chardata"`
+		Rel  string `xml:"rel,attr"`
+		Href string `xml:"href,attr"`
+	} `xml:"link"`
+	ID        string `xml:"id"`
+	ChannelId string `xml:"channelId"`
+	Title     string `xml:"title"`
+	Author    struct {
+		Text string `xml:",chardata"`
+		Name string `xml:"name"`
+		URI  string `xml:"uri"`
+	} `xml:"author"`
+	Published string `xml:"published"`
+	Entry     []struct {
+		Text      string `xml:",chardata"`
+		ID        string `xml:"id"`
+		VideoId   string `xml:"videoId"`
+		ChannelId string `xml:"channelId"`
+		Title     string `xml:"title"`
+		Link      struct {
+			Text string `xml:",chardata"`
+			Rel  string `xml:"rel,attr"`
+			Href string `xml:"href,attr"`
+		} `xml:"link"`
+		Author struct {
+			Text string `xml:",chardata"`
+			Name string `xml:"name"`
+			URI  string `xml:"uri"`
+		} `xml:"author"`
+		Published string `xml:"published"`
+		Updated   string `xml:"updated"`
+		Group     struct {
+			Text    string `xml:",chardata"`
+			Title   string `xml:"title"`
+			Content struct {
+				Text   string `xml:",chardata"`
+				URL    string `xml:"url,attr"`
+				Type   string `xml:"type,attr"`
+				Width  string `xml:"width,attr"`
+				Height string `xml:"height,attr"`
+			} `xml:"content"`
+			Thumbnail struct {
+				Text   string `xml:",chardata"`
+				URL    string `xml:"url,attr"`
+				Width  string `xml:"width,attr"`
+				Height string `xml:"height,attr"`
+			} `xml:"thumbnail"`
+			Description string `xml:"description"`
+			Community   struct {
+				Text       string `xml:",chardata"`
+				StarRating struct {
+					Text    string `xml:",chardata"`
+					Count   string `xml:"count,attr"`
+					Average string `xml:"average,attr"`
+					Min     string `xml:"min,attr"`
+					Max     string `xml:"max,attr"`
+				} `xml:"starRating"`
+				Statistics struct {
+					Text  string `xml:",chardata"`
+					Views string `xml:"views,attr"`
+				} `xml:"statistics"`
+			} `xml:"community"`
+		} `xml:"group"`
+	} `xml:"entry"`
+}
