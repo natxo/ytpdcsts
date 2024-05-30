@@ -28,6 +28,11 @@ func main() {
 		log.Fatalln("could not load the podcast file: ", err)
 	}
 
+	process_shows(urls)
+}
+
+// generate yaml files per yt show with the podcasts info
+func process_shows(urls []string) {
 	for _, item := range urls {
 		var pdcsts []Podcastitem
 		ytfeed, err := loadxml(item)
@@ -53,6 +58,7 @@ func main() {
 		}
 		writeshowyaml(ytfeed.Author.Name, uniq)
 	}
+
 }
 
 // load podcasts.yaml, return the channel id urls
