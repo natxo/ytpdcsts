@@ -17,15 +17,6 @@ const ytxmlurl = "https://www.youtube.com/feeds/videos.xml?channel_id="
 
 var ytclient = youtube.Client{}
 
-type Channels2follow struct {
-	Ytchannels []struct {
-		Name      string `yaml:"name"`
-		Channelid string `yaml:"channelid"`
-		Link      string `yaml:"link"`
-		Language  string `yaml:"language"`
-	} `yaml:"ytchannels"`
-}
-
 func main() {
 	urls, err := loadpodcastsfile("podcasts.yaml")
 	if err != nil {
@@ -66,10 +57,8 @@ func process_shows(urls []string) {
 			uniqmp4 = append(uniqmp4, item)
 		}
 
-		//writeshowyaml(ytfeed.Author.Name, uniq)
 		writeshowyaml(ytfeed.Author.Name, &uniqmp4)
 	}
-
 }
 
 func addmp4link(item *Podcastitem) {
@@ -131,7 +120,6 @@ func loadpodcastsfile(file string) (urls []string, err error) {
 	return urls, nil
 }
 
-// does the magic,
 func loadxml(url string) (feed Feed, err error) {
 	var result Feed
 	fmt.Println(url)
@@ -141,11 +129,9 @@ func loadxml(url string) (feed Feed, err error) {
 		err := xml.Unmarshal(xmlBytes, &result)
 		if err != nil {
 			return result, err
-			//writeshowyaml(result.Author.Name, result)
 		}
 		return result, nil
 	}
-
 	return result, nil
 }
 
@@ -185,13 +171,12 @@ func readshowyaml(show string) (pdcs []Podcastitem, err error) {
 		log.Fatalln("could not unmarshal ", show+".yaml", err)
 	}
 	return pdcs, nil
-
 }
 
 // extract []Podcastitem from Feed, yt only gives us the last 15
 func ytpodcastitems(feed Feed) []Podcastitem {
 	var pdcstitems []Podcastitem
-	// fill ytshowitems with data
+
 	for i := 0; i < len(feed.Entry); i++ {
 		item := Podcastitem{
 			Title:     feed.Entry[i].Title,
@@ -214,7 +199,6 @@ func writeshowyaml(show string, pdcsts *[]Podcastitem) error {
 	fmt.Println(f.Name())
 	defer f.Close()
 
-	//data, err := yaml.Marshal(&pdcsts)
 	data, err := yaml.Marshal(pdcsts)
 	if err != nil {
 		log.Fatalln("error marshaling items into show yaml")
@@ -305,4 +289,13 @@ type Feed struct {
 			} `xml:"community"`
 		} `xml:"group"`
 	} `xml:"entry"`
+}
+
+type Channels2follow struct {
+	Ytchannels []struct {
+		Name      string `yaml:"name"`
+		Channelid string `yaml:"channelid"`
+		Link      string `yaml:"link"`
+		Language  string `yaml:"language"`
+	} `yaml:"ytchannels"`
 }
