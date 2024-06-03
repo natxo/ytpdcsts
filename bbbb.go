@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 
 	"github.com/kkdai/youtube/v2"
 	"gopkg.in/yaml.v3"
@@ -86,8 +87,18 @@ func addmp4link(item *Podcastitem) {
 func _getsmallessvideo(videourl string, ytclient youtube.Client) (*youtube.Video, youtube.Format, error) {
 	video, err := ytclient.GetVideo(videourl)
 	if err != nil {
-		log.Println(err)
-		return nil, video.Formats[0], err
+		premiere, kk := regexp.MatchString(`LIVE_STREAM_OFFLINE`, err.Error())
+		if kk != nil {
+			log.Fatalln("error matching string: ", kk)
+		}
+		if premiere == true {
+			log.Println(videourl, " episode not yet published, waiting to be live streamed")
+			var dummy youtube.Format
+			return nil, dummy, err
+		} else {
+			log.Println(err.Error())
+			return nil, video.Formats[0], err
+		}
 	}
 	tiny := (video.Formats.WithAudioChannels().Quality("tiny"))
 	smallest := tiny[0]
@@ -162,7 +173,11 @@ func getXML(url string) ([]byte, error) {
 func readshowyaml(show string) (pdcs []Podcastitem, err error) {
 	f, err := os.ReadFile(show + ".yaml")
 	if err != nil {
-		log.Fatalln("could not read file ", show+".yaml", err)
+		if os.IsNotExist(err) {
+			os.Create(show + ".yaml")
+		} else {
+			log.Fatalln("could not read file ", show+".yaml", err)
+		}
 	}
 	err = yaml.Unmarshal(f, &pdcs)
 
