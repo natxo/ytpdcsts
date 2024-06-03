@@ -8,10 +8,13 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/kkdai/youtube/v2"
 	"gopkg.in/yaml.v3"
 )
 
 const ytxmlurl = "https://www.youtube.com/feeds/videos.xml?channel_id="
+
+var ytclient = youtube.Client{}
 
 type Channels2follow struct {
 	Ytchannels []struct {
@@ -49,15 +52,51 @@ func process_shows(urls []string) {
 		pdcsts = append(pdcsts, filefeed...)
 
 		keys := make(map[string]bool)
-		var uniq []Podcastitem
+		var uniq, uniqmp4 []Podcastitem
+
 		for _, item := range pdcsts {
 			if _, value := keys[item.Published]; !value {
 				keys[item.Published] = true
 				uniq = append(uniq, item)
 			}
 		}
-		writeshowyaml(ytfeed.Author.Name, uniq)
+		for _, item := range uniq {
+			addmp4link(&item)
+			uniqmp4 = append(uniqmp4, item)
+		}
+
+		//writeshowyaml(ytfeed.Author.Name, uniq)
+		writeshowyaml(ytfeed.Author.Name, &uniqmp4)
 	}
+
+}
+
+func addmp4link(item *Podcastitem) {
+	if len(item.Link) > 0 && len(item.Mp4) == 0 {
+		//video, format, err := _getsmallessvideo(item.Link, ytclient)
+		_, format, err := _getsmallessvideo(item.Link, ytclient)
+		if err != nil {
+			log.Fatalln("error while getting smallest video: ", err)
+		}
+		item.Mp4 = format.URL
+	}
+}
+
+// retrieve the videos with audio only, then the one with the smalles footprint
+func _getsmallessvideo(videourl string, ytclient youtube.Client) (*youtube.Video, youtube.Format, error) {
+	video, err := ytclient.GetVideo(videourl)
+	if err != nil {
+		log.Println(err)
+		return nil, video.Formats[0], err
+	}
+	tiny := (video.Formats.WithAudioChannels().Quality("tiny"))
+	smallest := tiny[0]
+	for _, f := range tiny {
+		if f.ContentLength < smallest.ContentLength {
+			smallest = f
+		}
+	}
+	return video, smallest, nil
 
 }
 
@@ -119,6 +158,7 @@ func getXML(url string) ([]byte, error) {
 	return data, nil
 }
 
+// load show yaml into []Podcastime list
 func readshowyaml(show string) (pdcs []Podcastitem, err error) {
 	f, err := os.ReadFile(show + ".yaml")
 	if err != nil {
@@ -142,6 +182,7 @@ func ytpodcastitems(feed Feed) []Podcastitem {
 			Title:     feed.Entry[i].Title,
 			Published: feed.Entry[i].Published,
 			Link:      feed.Entry[i].Link.Href,
+			Mp4:       "",
 		}
 		pdcstitems = append(pdcstitems, item)
 	}
@@ -150,7 +191,7 @@ func ytpodcastitems(feed Feed) []Podcastitem {
 
 // writes the feed info to a yaml file/poorman's db
 // here we save the older we already go and the newest 15 from the yt xml feed
-func writeshowyaml(show string, pdcsts []Podcastitem) error {
+func writeshowyaml(show string, pdcsts *[]Podcastitem) error {
 	f, err := os.OpenFile(show+".yaml", os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0600)
 	if err != nil {
 		log.Fatalln("could not create or truncate file", show+".yaml", err)
@@ -158,7 +199,8 @@ func writeshowyaml(show string, pdcsts []Podcastitem) error {
 	fmt.Println(f.Name())
 	defer f.Close()
 
-	data, err := yaml.Marshal(&pdcsts)
+	//data, err := yaml.Marshal(&pdcsts)
+	data, err := yaml.Marshal(pdcsts)
 	if err != nil {
 		log.Fatalln("error marshaling items into show yaml")
 	}
@@ -171,9 +213,10 @@ func writeshowyaml(show string, pdcsts []Podcastitem) error {
 }
 
 type Podcastitem struct {
-	Title     string `yaml:"title"`
-	Published string `yaml:"published"`
-	Link      string `yaml:"link"`
+	Title     string `yaml:"title,omitempty"`
+	Published string `yaml:"published,omitempty"`
+	Link      string `yaml:"link,omitempty"`
+	Mp4       string `yaml:"mp4,omitempty"`
 }
 
 type Feed struct {
