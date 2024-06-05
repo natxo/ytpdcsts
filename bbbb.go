@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 
+	"github.com/google/uuid"
 	"github.com/kkdai/youtube/v2"
 	"gopkg.in/yaml.v3"
 )
@@ -40,8 +41,8 @@ func process_shows(urls []string) {
 		if err != nil {
 			log.Fatalln("could not read ", ytfeed.Author.Name, err)
 		}
-		pdcsts = append(pdcsts, ytpdcsts...)
 		pdcsts = append(pdcsts, filefeed...)
+		pdcsts = append(pdcsts, ytpdcsts...)
 
 		keys := make(map[string]bool)
 		var uniq, uniqmp4 []Podcastitem
@@ -54,6 +55,7 @@ func process_shows(urls []string) {
 		}
 		for _, item := range uniq {
 			addmp4link(&item)
+			addguid(&item)
 			uniqmp4 = append(uniqmp4, item)
 		}
 
@@ -69,6 +71,16 @@ func addmp4link(item *Podcastitem) {
 			log.Fatalln("error while getting smallest video: ", err)
 		}
 		item.Mp4 = format.URL
+	}
+}
+
+func addguid(item *Podcastitem) {
+	err := uuid.Validate(item.Guid)
+	if err != nil {
+		fmt.Println("Guid is not valid!", err)
+		item.Guid = uuid.New().String()
+	} else {
+		fmt.Println("Guid is valid!")
 	}
 }
 
@@ -216,6 +228,7 @@ type Podcastitem struct {
 	Published string `yaml:"published,omitempty"`
 	Link      string `yaml:"link,omitempty"`
 	Mp4       string `yaml:"mp4,omitempty"`
+	Guid      string `yaml:"guid,omitempty"`
 }
 
 type Feed struct {
