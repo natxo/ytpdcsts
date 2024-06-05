@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/kkdai/youtube/v2"
@@ -63,12 +64,18 @@ func process_shows(urls []string) {
 	}
 }
 
+// fill in mp4 fields of Podcastitem; if name if video starts with '-' replace it
+// or cli for ffmpeg fails - it thinks it's a ffmpeg cli switch
 func addmp4link(item *Podcastitem) {
 	if len(item.Link) > 0 && len(item.Mp4) == 0 {
-		//video, format, err := _getsmallessvideo(item.Link, ytclient)
-		_, format, err := _getsmallessvideo(item.Link, ytclient)
+		video, format, err := _getsmallessvideo(item.Link, ytclient)
 		if err != nil {
 			log.Fatalln("error while getting smallest video: ", err)
+		}
+		if strings.HasPrefix(video.ID, "-") {
+			item.Mp4file = strings.Replace(video.ID, "-", "_", 1)
+		} else {
+			item.Mp4file = video.ID
 		}
 		item.Mp4 = format.URL
 	}
@@ -229,6 +236,7 @@ type Podcastitem struct {
 	Link      string `yaml:"link,omitempty"`
 	Mp4       string `yaml:"mp4,omitempty"`
 	Guid      string `yaml:"guid,omitempty"`
+	Mp4file   string `yaml:"mp4file,omitempty"`
 }
 
 type Feed struct {
