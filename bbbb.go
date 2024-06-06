@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/kkdai/youtube/v2"
@@ -78,6 +79,7 @@ func addmp4link(item *Podcastitem) {
 			item.Mp4file = video.ID
 		}
 		item.Mp4 = format.URL
+		item.Duration = video.Duration.Abs()
 	}
 }
 
@@ -231,12 +233,13 @@ func writeshowyaml(show string, pdcsts *[]Podcastitem) error {
 }
 
 type Podcastitem struct {
-	Title     string `yaml:"title,omitempty"`
-	Published string `yaml:"published,omitempty"`
-	Link      string `yaml:"link,omitempty"`
-	Mp4       string `yaml:"mp4,omitempty"`
-	Guid      string `yaml:"guid,omitempty"`
-	Mp4file   string `yaml:"mp4file,omitempty"`
+	Title     string        `yaml:"title,omitempty"`
+	Published string        `yaml:"published,omitempty"`
+	Link      string        `yaml:"link,omitempty"`
+	Mp4       string        `yaml:"mp4,omitempty"`
+	Guid      string        `yaml:"guid,omitempty"`
+	Mp4file   string        `yaml:"mp4file,omitempty"`
+	Duration  time.Duration `yaml:"duration,omitempty"`
 }
 
 type Feed struct {
