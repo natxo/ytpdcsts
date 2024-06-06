@@ -32,37 +32,54 @@ func main() {
 // generate yaml files per yt show with the podcasts info
 func process_shows(urls []string) {
 	for _, item := range urls {
-		var pdcsts []Podcastitem
-		ytfeed, err := loadxml(item)
-		if err != nil {
-			log.Fatalln("could not load the xml for ", ytfeed.Author.Name, ": ", err)
-		}
-		ytpdcsts := ytpodcastitems(ytfeed)
-
-		filefeed, err := readshowyaml(ytfeed.Author.Name)
-		if err != nil {
-			log.Fatalln("could not read ", ytfeed.Author.Name, err)
-		}
-		pdcsts = append(pdcsts, filefeed...)
-		pdcsts = append(pdcsts, ytpdcsts...)
-
-		keys := make(map[string]bool)
-		var uniq, uniqmp4 []Podcastitem
-
-		for _, item := range pdcsts {
-			if _, value := keys[item.Published]; !value {
-				keys[item.Published] = true
-				uniq = append(uniq, item)
-			}
-		}
-		for _, item := range uniq {
-			addmp4link(&item)
-			addguid(&item)
-			uniqmp4 = append(uniqmp4, item)
-		}
-
-		writeshowyaml(ytfeed.Author.Name, &uniqmp4)
+		// define 3x sets of items
+		var uniqmp4 []Podcastitem
+		ytpdcsts, filefeed, author := fromxmltoyaml(item)
+		uniqmp4 = createniqueset(ytpdcsts, filefeed)
+		writeshowyaml(author, &uniqmp4)
 	}
+}
+
+// helpers after this
+
+// process the xml in the url, return 2 sets of Podcastitem strucs, and the
+// author name
+// the 1st set comes from the xml, the second set is from the written yaml file
+// we generate, so we only save info once later
+func fromxmltoyaml(url string) ([]Podcastitem, []Podcastitem, string) {
+	ytfeed, err := loadxml(url)
+	if err != nil {
+		log.Fatalln("could not load the xml for ", ytfeed.Author.Name, ": ", err)
+	}
+	filefeed, err := readshowyaml(ytfeed.Author.Name)
+	if err != nil {
+		log.Fatalln("could not read ", ytfeed.Author.Name, err)
+	}
+	return ytpodcastitems(ytfeed), filefeed, ytfeed.Author.Name
+
+}
+
+// merge the sets from xml and from file, return just one set of unique
+// []Podcastitem
+func createniqueset(fromyt, fromfile []Podcastitem) (uniqmp4 []Podcastitem) {
+	var pdcsts, uniq []Podcastitem
+	pdcsts = append(pdcsts, fromfile...)
+	pdcsts = append(pdcsts, fromyt...)
+
+	keys := make(map[string]bool)
+
+	for _, item := range pdcsts {
+		if _, value := keys[item.Published]; !value {
+			keys[item.Published] = true
+			uniq = append(uniq, item)
+		}
+	}
+	for _, item := range uniq {
+		addmp4link(&item)
+		addguid(&item)
+		uniqmp4 = append(uniqmp4, item)
+	}
+	return uniqmp4
 }
 
 // fill in mp4 fields of Podcastitem; if name if video starts with '-' replace it
