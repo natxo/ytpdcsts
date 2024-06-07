@@ -85,33 +85,31 @@ func createniqueset(fromyt, fromfile []Podcastitem) (uniqmp4 []Podcastitem) {
 // fill in mp4 fields of Podcastitem; if name if video starts with '-' replace it
 // or cli for ffmpeg fails - it thinks it's a ffmpeg cli switch
 func addmp4link(item *Podcastitem) {
-	if len(item.Link) > 0 && len(item.Mp4) == 0 {
-		video, format, err := _getsmallessvideo(item.Link, ytclient)
-		if err != nil {
-			log.Fatalln("error while getting smallest video: ", err)
-		}
-		if strings.HasPrefix(video.ID, "-") {
-			item.Mp4file = strings.Replace(video.ID, "-", "_", 1)
-		} else {
-			item.Mp4file = video.ID
-		}
-		item.Mp4 = format.URL
-		item.Duration = video.Duration.Abs()
+	//if len(item.Link) > 0 && len(item.Format.URL) == 0 {
+	video, err := _getsmallessvideo(item.Link, ytclient)
+	if err != nil {
+		log.Fatalln("error while getting smallest video: ", err)
 	}
+	if strings.HasPrefix(video.ID, "-") {
+		item.Mp4file = strings.Replace(video.ID, "-", "_", 1)
+	} else {
+		item.Mp4file = video.ID
+	}
+	item.Video = *video
+	item.Duration = video.Duration.Abs()
+	//}
 }
 
 func addguid(item *Podcastitem) {
 	err := uuid.Validate(item.Guid)
 	if err != nil {
-		fmt.Println("Guid is not valid!", err)
+		fmt.Println("Guid is not valid, probably new episode: ", err)
 		item.Guid = uuid.New().String()
-	} else {
-		fmt.Println("Guid is valid!")
 	}
 }
 
 // retrieve the videos with audio only, then the one with the smalles footprint
-func _getsmallessvideo(videourl string, ytclient youtube.Client) (*youtube.Video, youtube.Format, error) {
+func _getsmallessvideo(videourl string, ytclient youtube.Client) (*youtube.Video, error) {
 	video, err := ytclient.GetVideo(videourl)
 	if err != nil {
 		premiere, kk := regexp.MatchString(`LIVE_STREAM_OFFLINE`, err.Error())
@@ -120,21 +118,25 @@ func _getsmallessvideo(videourl string, ytclient youtube.Client) (*youtube.Video
 		}
 		if premiere == true {
 			log.Println(videourl, " episode not yet published, waiting to be live streamed")
-			var dummy youtube.Format
-			return nil, dummy, err
+			return nil, err
 		} else {
 			log.Println(err.Error())
-			return nil, video.Formats[0], err
+			return nil, err
 		}
 	}
 	tiny := (video.Formats.WithAudioChannels().Quality("tiny"))
 	smallest := tiny[0]
+
 	for _, f := range tiny {
 		if f.ContentLength < smallest.ContentLength {
 			smallest = f
 		}
 	}
-	return video, smallest, nil
+	// empty the formats list, add only the smallest one, not interested in the
+	// rest - yaml file gets huge otherwise
+	video.Formats = nil
+	video.Formats = append(video.Formats, smallest)
+	return video, nil
 
 }
 
@@ -216,13 +218,16 @@ func ytpodcastitems(feed Feed) []Podcastitem {
 	var pdcstitems []Podcastitem
 
 	for i := 0; i < len(feed.Entry); i++ {
-		item := Podcastitem{
-			Title:     feed.Entry[i].Title,
-			Published: feed.Entry[i].Published,
-			Link:      feed.Entry[i].Link.Href,
-			Mp4:       "",
+		if strings.Contains(feed.Entry[i].Title, "#shorts") {
+			continue
+		} else {
+			item := Podcastitem{
+				Title:     feed.Entry[i].Title,
+				Published: feed.Entry[i].Published,
+				Link:      feed.Entry[i].Link.Href,
+			}
+			pdcstitems = append(pdcstitems, item)
 		}
-		pdcstitems = append(pdcstitems, item)
 	}
 	return pdcstitems
 }
@@ -249,14 +254,74 @@ func writeshowyaml(show string, pdcsts *[]Podcastitem) error {
 	return nil
 }
 
+// create files, copy the yt stream to those files, set the lastmodified
+// timestamps on the created files, skip already downloaded files
+/* func _dlmp4(ytclient youtube.Client, video *youtube.Video, format youtube.Format) (videofile *os.File, err error) {
+
+	mp3, err := os.Open(video.ID + ".mp3")
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Println("mp3 not available, keep running")
+	} else {
+		log.Println("mp3 already available, skipping")
+		return mp3, nil
+	}
+
+	file, err := os.Open(video.ID + ".mp4")
+	if err != nil && os.IsNotExist(err) {
+		fh, err := os.Create(video.ID + ".mp4")
+		if err != nil {
+			log.Println("error creating file: ", err)
+			return nil, err
+		}
+		defer fh.Close()
+		stream, _, err := ytclient.GetStream(video, &format)
+		if err != nil {
+			log.Fatalln("error streaming ", err)
+			return nil, err
+		}
+		_, err = io.Copy(fh, stream)
+		if err != nil {
+			log.Println("error copying stream to file", err)
+			return nil, err
+		}
+		log.Printf("%s copied from stream\n", fh.Name())
+		file_no_ext := strings.TrimSuffix(fh.Name(), filepath.Ext(fh.Name()))
+		log.Println("File name without ext: ", file_no_ext)
+		err = _conver2mp3(file_no_ext+".mp4", file_no_ext+".mp3")
+		if err != nil {
+			log.Println("error converting to mp3", err)
+		}
+
+		err = os.Chtimes(fh.Name(), video.PublishDate, publisheddate)
+		if err != nil {
+			log.Println("error modifiyting mtime/atime for file", err)
+			return nil, err
+		}
+		err = os.Chtimes(file_no_ext+".mp3", publisheddate, publisheddate)
+		return fh, nil
+	} else if err != nil {
+		log.Println("error opening file: ", err)
+	} else {
+		fileinfo, err := file.Stat()
+		if err != nil {
+			log.Fatalln("error statting file: ", err)
+		}
+		if fileinfo.Size() == format.ContentLength {
+			return file, nil
+		}
+	}
+	return file, err
+}
+*/
+
 type Podcastitem struct {
 	Title     string        `yaml:"title,omitempty"`
 	Published string        `yaml:"published,omitempty"`
 	Link      string        `yaml:"link,omitempty"`
-	Mp4       string        `yaml:"mp4,omitempty"`
 	Guid      string        `yaml:"guid,omitempty"`
 	Mp4file   string        `yaml:"mp4file,omitempty"`
 	Duration  time.Duration `yaml:"duration,omitempty"`
+	Video     youtube.Video `yaml:"video,omitempty"`
 }
 
 type Feed struct {
