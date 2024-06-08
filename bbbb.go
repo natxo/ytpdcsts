@@ -139,7 +139,6 @@ func createniqueset(fromyt, fromfile []Podcastitem) (uniqmp4 []Podcastitem) {
 	var pdcsts, uniq []Podcastitem
 	pdcsts = append(pdcsts, fromfile...)
 	pdcsts = append(pdcsts, fromyt...)
-	//noshorts := removeshorts(&pdcsts)
 
 	keys := make(map[string]bool)
 
@@ -151,10 +150,11 @@ func createniqueset(fromyt, fromfile []Podcastitem) (uniqmp4 []Podcastitem) {
 	}
 	for _, item := range uniq {
 		addmp4link(&item)
-		addguid(&item)
 		uniqmp4 = append(uniqmp4, item)
 	}
-	return uniqmp4
+	noshorts := removeshorts(&uniqmp4)
+	//return uniqmp4
+	return noshorts
 }
 
 func removeshorts(pdcsts *[]Podcastitem) []Podcastitem {
@@ -165,8 +165,12 @@ func removeshorts(pdcsts *[]Podcastitem) []Podcastitem {
 		if item.Video.Duration <= min {
 			continue
 		} else {
+			addguid(&item)
 			longerthan1m = append(longerthan1m, item)
 		}
+	}
+	for _, i := range longerthan1m {
+		fmt.Println(i.Title, " lasts ", i.Duration)
 	}
 	return longerthan1m
 }
@@ -199,9 +203,9 @@ func addguid(item *Podcastitem) {
 func _getsmallessvideo(videourl string, ytclient youtube.Client) (*youtube.Video, error) {
 	video, err := ytclient.GetVideo(videourl)
 	if err != nil {
-		premiere, kk := regexp.MatchString(`LIVE_STREAM_OFFLINE`, err.Error())
+		premiere, kk := regexp.MatchString("LIVE_STREAM_OFFLINE", err.Error())
 		if kk != nil {
-			log.Fatalln("error matching string: ", kk)
+			log.Println("error matching LIVE_STREAM_OFFLINE: ", kk)
 		}
 		if premiere == true {
 			log.Println(videourl, " episode not yet published, waiting to be live streamed")
@@ -303,7 +307,7 @@ func ytpodcastitems(feed Feed) []Podcastitem {
 	var pdcstitems []Podcastitem
 
 	for i := 0; i < len(feed.Entry); i++ {
-		fmt.Println(feed.Entry[i].Title)
+		//fmt.Println(feed.Entry[i].Title)
 		item := Podcastitem{
 			Title:     feed.Entry[i].Title,
 			Published: feed.Entry[i].Published,
@@ -321,7 +325,7 @@ func writeshowyaml(show string, pdcsts *[]Podcastitem) error {
 	if err != nil {
 		log.Fatalln("could not create or truncate file", show+".yaml", err)
 	}
-	fmt.Println(f.Name())
+	//fmt.Println(f.Name())
 	defer f.Close()
 
 	data, err := yaml.Marshal(pdcsts)
@@ -338,12 +342,22 @@ func writeshowyaml(show string, pdcsts *[]Podcastitem) error {
 
 // create files, copy the yt stream to those files, set the lastmodified
 // timestamps on the created files, skip already downloaded files
+// removes mp4 files
 func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, err error) {
 	mp3, err := os.Open(video.ID + ".mp3")
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Println("mp3 not available, keep running")
 	} else {
 		log.Println("mp3 already available, skipping")
+		_, err := os.Stat(video.ID + ".mp4")
+		if err == nil {
+			err = os.Remove(video.ID + ".mp4")
+			if err != nil {
+				log.Println("could not remove mp4 file: ", err)
+			}
+		} else if os.IsNotExist(err) {
+		}
+
 		return mp3, nil
 	}
 
@@ -370,6 +384,10 @@ func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, e
 		err = _conver2mp3(video.ID+".mp4", video.ID+".mp3")
 		if err != nil {
 			log.Println("error converting to mp3", err)
+		}
+		err = os.Remove(video.ID + ".mp4")
+		if err != nil {
+			log.Println("could not remove mp4 file: ", err)
 		}
 
 	}
