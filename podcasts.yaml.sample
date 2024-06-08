@@ -1,0 +1,11 @@
+# to find the channelid, open the source of the channel and look for
+# "https://www.youtube.com/channel/" on the source of the page, it 
+# should be right after that.
+ytchannels:
+  - name: "Pursuit of Wonder"
+    channelid: "UC-tLyAaPbRZiYrOJxAGB7dQ"
+    link: "http://yourwebhostforyourpodcastshere
+    language: English
+  - name: "Philosophy Tube"   
+    channelid: "UC2PA-AKmVpU6NKCGtZq_rKQ"
+    link: "http://yourwebhostforyourpodcastshere

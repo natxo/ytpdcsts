@@ -2,16 +2,19 @@ package main
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/CallumKerson/podcasts"
 	"github.com/google/uuid"
 	"github.com/kkdai/youtube/v2"
 	"gopkg.in/yaml.v3"
@@ -22,12 +25,13 @@ const ytxmlurl = "https://www.youtube.com/feeds/videos.xml?channel_id="
 var ytclient = youtube.Client{}
 
 func main() {
-	urls, err := loadpodcastsfile("podcasts.yaml")
+	urls, channels, err := loadpodcastsfile("podcasts.yaml")
 	if err != nil {
 		log.Fatalln("could not load the podcast file: ", err)
 	}
 
 	process_shows(urls)
+	create_podcast(channels)
 }
 
 // generate yaml files per yt show with the podcasts info
@@ -37,23 +41,69 @@ func process_shows(urls []string) {
 		// define 3x sets of items
 		var uniqmp4 []Podcastitem
 		ytpdcsts, filefeed, author := fromxmltoyaml(item)
-		dirname := create_channeldir(author)
 		uniqmp4 = createniqueset(ytpdcsts, filefeed)
 		writeshowyaml(author, &uniqmp4)
-		//enter channel dir
-		err := os.Chdir(dirname)
 		for _, item := range uniqmp4 {
 			dlmp4(ytclient, &item.Video)
-		}
-		//go back to main dir
-		err = os.Chdir("..")
-		if err != nil {
-			log.Fatalln(err)
 		}
 	}
 }
 
 // helpers after this
+
+func create_podcast(items Channels2follow) {
+	for _, item := range items.Ytchannels {
+		var dirname string
+		if strings.Contains(item.Name, " ") {
+			dirname = strings.Replace(item.Name, " ", "", -1)
+		}
+		p := podcasts.Podcast{
+			Title:       item.Name,
+			Description: item.Description,
+			Link:        item.Link + "/" + dirname + ".xml",
+			Language:    item.Language,
+		}
+
+		chapters, err := readshowyaml(item.Name)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		for _, chapter := range chapters {
+			pubdate, err := time.Parse(time.RFC3339, chapter.Published)
+			if err != nil {
+				log.Fatalln(err)
+			}
+			p.AddItem(&podcasts.Item{
+				Title: chapter.Title,
+				GUID:  chapter.Guid,
+				PubDate: &podcasts.PubDate{
+					Time: pubdate},
+				Author: item.Name,
+				Duration: &podcasts.Duration{
+					Duration: chapter.Duration,
+				},
+				Enclosure: &podcasts.Enclosure{
+					URL:    item.Link + "/" + chapter.Mp4file + ".mp3",
+					Length: chapter.Video.Formats[0].ApproxDurationMs,
+					Type:   "audio/x-mpeg",
+				},
+			})
+		}
+		feed, err := p.Feed()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fh, err := os.OpenFile(dirname+".xml", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		defer fh.Close()
+		err = feed.Write(fh)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
+}
 
 func create_channeldir(name string) string {
 	if strings.Contains(name, " ") {
@@ -89,11 +139,11 @@ func createniqueset(fromyt, fromfile []Podcastitem) (uniqmp4 []Podcastitem) {
 	var pdcsts, uniq []Podcastitem
 	pdcsts = append(pdcsts, fromfile...)
 	pdcsts = append(pdcsts, fromyt...)
-	noshorts := removeshorts(&pdcsts)
+	//noshorts := removeshorts(&pdcsts)
 
 	keys := make(map[string]bool)
 
-	for _, item := range noshorts {
+	for _, item := range pdcsts {
 		if _, value := keys[item.Published]; !value {
 			keys[item.Published] = true
 			uniq = append(uniq, item)
@@ -124,20 +174,17 @@ func removeshorts(pdcsts *[]Podcastitem) []Podcastitem {
 // fill in mp4 fields of Podcastitem; if name if video starts with '-' replace it
 // or cli for ffmpeg fails - it thinks it's a ffmpeg cli switch
 func addmp4link(item *Podcastitem) {
-	//if len(item.Link) > 0 && len(item.Video.Formats[0].URL) == 0 {
-	if len(item.Link) > 0 {
-		video, err := _getsmallessvideo(item.Link, ytclient)
-		if err != nil {
-			log.Fatalln("error while getting smallest video: ", err)
-		}
-		if strings.HasPrefix(video.ID, "-") {
-			item.Mp4file = strings.Replace(video.ID, "-", "_", 1)
-		} else {
-			item.Mp4file = video.ID
-		}
-		item.Video = *video
-		item.Duration = video.Duration.Abs()
+	video, err := _getsmallessvideo(item.Link, ytclient)
+	if err != nil {
+		log.Fatalln("error while getting smallest video: ", err)
 	}
+	if strings.HasPrefix(video.ID, "-") {
+		item.Mp4file = strings.Replace(video.ID, "-", "_", 1)
+	} else {
+		item.Mp4file = video.ID
+	}
+	item.Video = *video
+	item.Duration = video.Duration.Abs()
 }
 
 func addguid(item *Podcastitem) {
@@ -181,13 +228,11 @@ func _getsmallessvideo(videourl string, ytclient youtube.Client) (*youtube.Video
 }
 
 // load podcasts.yaml, return the channel id urls
-func loadpodcastsfile(file string) (urls []string, err error) {
+func loadpodcastsfile(file string) (urls []string, podcasts Channels2follow, err error) {
 	pdcfile, err := os.ReadFile("podcasts.yaml")
 	if err != nil {
 		panic("could not read podcasts.yaml")
 	}
-
-	var podcasts Channels2follow
 
 	err = yaml.Unmarshal(pdcfile, &podcasts)
 	if err != nil {
@@ -197,7 +242,7 @@ func loadpodcastsfile(file string) (urls []string, err error) {
 	for _, value := range podcasts.Ytchannels {
 		urls = append(urls, ytxmlurl+value.Channelid)
 	}
-	return urls, nil
+	return urls, podcasts, nil
 }
 
 func loadxml(url string) (feed Feed, err error) {
@@ -258,16 +303,13 @@ func ytpodcastitems(feed Feed) []Podcastitem {
 	var pdcstitems []Podcastitem
 
 	for i := 0; i < len(feed.Entry); i++ {
-		if strings.Contains(feed.Entry[i].Title, "#shorts") {
-			continue
-		} else {
-			item := Podcastitem{
-				Title:     feed.Entry[i].Title,
-				Published: feed.Entry[i].Published,
-				Link:      feed.Entry[i].Link.Href,
-			}
-			pdcstitems = append(pdcstitems, item)
+		fmt.Println(feed.Entry[i].Title)
+		item := Podcastitem{
+			Title:     feed.Entry[i].Title,
+			Published: feed.Entry[i].Published,
+			Link:      feed.Entry[i].Link.Href,
 		}
+		pdcstitems = append(pdcstitems, item)
 	}
 	return pdcstitems
 }
@@ -297,10 +339,17 @@ func writeshowyaml(show string, pdcsts *[]Podcastitem) error {
 // create files, copy the yt stream to those files, set the lastmodified
 // timestamps on the created files, skip already downloaded files
 func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, err error) {
+	mp3, err := os.Open(video.ID + ".mp3")
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Println("mp3 not available, keep running")
+	} else {
+		log.Println("mp3 already available, skipping")
+		return mp3, nil
+	}
 
-	file, err := os.Open(video.ID + ".m4a")
+	file, err := os.Open(video.ID + ".mp4")
 	if err != nil && os.IsNotExist(err) {
-		fh, err := os.Create(video.ID + ".m4a")
+		fh, err := os.Create(video.ID + ".mp4")
 		if err != nil {
 			log.Println("error creating file: ", err)
 			return nil, err
@@ -318,13 +367,23 @@ func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, e
 		}
 		log.Printf("%s copied from stream\n", fh.Name())
 		log.Println("File name without ext: ", video.ID)
-		//err = _conver2mp3(video.ID+".mp4", video.ID+".mp3")
-		//if err != nil {
-		//		log.Println("error converting to mp3", err)
-		//	}
+		err = _conver2mp3(video.ID+".mp4", video.ID+".mp3")
+		if err != nil {
+			log.Println("error converting to mp3", err)
+		}
 
 	}
 	return file, err
+}
+
+// convert mp4 to mp3 using ffmpeg
+func _conver2mp3(mp4file, mp3file string) error {
+	args := []string{"-i", mp4file, "-map", "0:a:0", "-b:a", "48k", mp3file}
+	cmd := exec.Command("ffmpeg", args...)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg conversion failed: %s", err)
+	}
+	return nil
 }
 
 type Podcastitem struct {
@@ -412,9 +471,10 @@ type Feed struct {
 
 type Channels2follow struct {
 	Ytchannels []struct {
-		Name      string `yaml:"name"`
-		Channelid string `yaml:"channelid"`
-		Link      string `yaml:"link"`
-		Language  string `yaml:"language"`
+		Name        string `yaml:"name"`
+		Channelid   string `yaml:"channelid"`
+		Link        string `yaml:"link"`
+		Language    string `yaml:"language,omitempty"`
+		Description string `yaml:"description,omitempty"`
 	} `yaml:"ytchannels"`
 }
