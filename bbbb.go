@@ -89,7 +89,14 @@ func create_podcast(items Channels2follow) {
 				},
 			})
 		}
-		feed, err := p.Feed()
+		feed, err := p.Feed(
+			podcasts.Author(item.Name),
+			podcasts.Block,
+			podcasts.Complete,
+			podcasts.NewFeedURL(item.Link+"/"+dirname+".xml"),
+			podcasts.Subtitle(item.Description),
+			podcasts.Summary(item.Description),
+		)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -177,10 +184,17 @@ func removeshorts(pdcsts *[]Podcastitem) []Podcastitem {
 
 // fill in mp4 fields of Podcastitem; if name if video starts with '-' replace it
 // or cli for ffmpeg fails - it thinks it's a ffmpeg cli switch
-func addmp4link(item *Podcastitem) {
+func addmp4link(item *Podcastitem) bool {
 	video, err := _getsmallessvideo(item.Link, ytclient)
 	if err != nil {
-		log.Fatalln("error while getting smallest video: ", err)
+		premiere, kk := regexp.MatchString("LIVE_STREAM_OFFLINE", err.Error())
+		if kk != nil {
+			log.Println("error matching LIVE_STREAM_OFFLINE: ", kk)
+		}
+		if premiere == true {
+			log.Println("episode not yet published, waiting to be live streamed")
+			return true
+		}
 	}
 	if strings.HasPrefix(video.ID, "-") {
 		item.Mp4file = strings.Replace(video.ID, "-", "_", 1)
@@ -189,6 +203,7 @@ func addmp4link(item *Podcastitem) {
 	}
 	item.Video = *video
 	item.Duration = video.Duration.Abs()
+	return true
 }
 
 func addguid(item *Podcastitem) {
