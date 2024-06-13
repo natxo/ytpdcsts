@@ -75,7 +75,7 @@ func create_podcast(items Channels2follow) {
 			}
 			p.AddItem(&podcasts.Item{
 				Title: chapter.Title,
-				GUID:  chapter.Guid,
+				GUID:  "http://whatever.example.com/" + chapter.Guid,
 				PubDate: &podcasts.PubDate{
 					Time: pubdate},
 				Author: item.Name,
@@ -372,7 +372,6 @@ func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, e
 			}
 		} else if os.IsNotExist(err) {
 		}
-
 		return mp3, nil
 	}
 
@@ -415,6 +414,15 @@ func _conver2mp3(mp4file, mp3file string) error {
 	cmd := exec.Command("ffmpeg", args...)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("ffmpeg conversion failed: %s", err)
+	}
+	f, err := os.Stat(mp3file)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if f.Size() < int64(4000000) {
+		log.Printf("%s seems too small: %d, wrong conversion?\n", f.Name(), f.Size())
+		log.Println("re-running ffmpeg again ....")
+		_conver2mp3(mp4file, mp3file)
 	}
 	return nil
 }
