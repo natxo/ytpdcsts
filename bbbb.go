@@ -73,9 +73,12 @@ func create_podcast(items Channels2follow) {
 			if err != nil {
 				log.Fatalln(err)
 			}
+			cdata := new(podcasts.CDATAText)
+			cdata.Value = chapter.Video.Description
 			p.AddItem(&podcasts.Item{
-				Title: chapter.Title,
-				GUID:  "http://whatever.example.com/" + chapter.Guid,
+				Title:       chapter.Title,
+				Description: cdata,
+				GUID:        "http://whatever.example.com/" + chapter.Guid,
 				PubDate: &podcasts.PubDate{
 					Time: pubdate},
 				Author: item.Name,
