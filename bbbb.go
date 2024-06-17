@@ -251,14 +251,14 @@ func _getsmallessvideo(videourl string, ytclient youtube.Client) (*youtube.Video
 
 // load podcasts.yaml, return the channel id urls
 func loadpodcastsfile(file string) (urls []string, podcasts Channels2follow, err error) {
-	pdcfile, err := os.ReadFile("podcasts.yaml")
+	pdcfile, err := os.ReadFile(file)
 	if err != nil {
-		panic("could not read podcasts.yaml")
+		log.Fatalln("could not read ", file, err)
 	}
 
 	err = yaml.Unmarshal(pdcfile, &podcasts)
 	if err != nil {
-		panic("could not unmarshal podcasts.yaml")
+		log.Fatalln("could not unmarshal ", file, err)
 	}
 
 	for _, value := range podcasts.Ytchannels {
