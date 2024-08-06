@@ -2,6 +2,10 @@
 # "https://www.youtube.com/channel/" on the source of the page, it 
 # should be right after that.
 ytchannels:
+  - name: "Webdriver Torso"
+    channelid: "UCsLiV4WJfkTEHH0b9PmRklw"
+    link: "http://yourwebhostforyourpodcastshere"
+    description: "Never gonna give you up"
   - name: "Pursuit of Wonder"
     channelid: "UC-tLyAaPbRZiYrOJxAGB7dQ"
     link: "http://yourwebhostforyourpodcastshere"

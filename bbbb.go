@@ -115,17 +115,6 @@ func create_podcast(items Channels2follow) {
 	}
 }
 
-func create_channeldir(name string) string {
-	if strings.Contains(name, " ") {
-		name = strings.Replace(name, " ", "", -1)
-	}
-	err := os.Mkdir(name, 0755)
-	if err != nil && !os.IsExist(err) {
-		log.Fatal(err)
-	}
-	return (name)
-}
-
 // process the xml in the url, return 2 sets of Podcastitem strucs, and the
 // author name
 // the 1st set comes from the xml, the second set is from the written yaml file
@@ -269,7 +258,7 @@ func loadpodcastsfile(file string) (urls []string, podcasts Channels2follow, err
 
 func loadxml(url string) (feed Feed, err error) {
 	var result Feed
-	fmt.Println(url)
+	log.Println(url)
 	if xmlBytes, err := getXML(url); err != nil {
 		log.Fatalf("Failed to get XML: %v", err)
 	} else {
@@ -378,6 +367,11 @@ func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, e
 		return mp3, nil
 	}
 
+	// replace prefix
+	if strings.HasPrefix(video.ID, "-") {
+		video.ID = strings.Replace(video.ID, "-", "_", 1)
+		log.Println(video.ID)
+	}
 	file, err := os.Open(video.ID + ".mp4")
 	if err != nil && os.IsNotExist(err) {
 		fh, err := os.Create(video.ID + ".mp4")

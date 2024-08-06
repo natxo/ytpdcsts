@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/xml"
+	"os"
 	"slices"
 	"testing"
 )
 
 func TestLoadpodcastbfile(t *testing.T) {
-	exp_ids := []string{"UC-tLyAaPbRZiYrOJxAGB7dQ", "UC2PA-AKmVpU6NKCGtZq_rKQ"}
+	exp_ids := []string{"UCsLiV4WJfkTEHH0b9PmRklw", "UC-tLyAaPbRZiYrOJxAGB7dQ", "UC2PA-AKmVpU6NKCGtZq_rKQ"}
 	var exp_urls []string
 	for _, id := range exp_ids {
 		exp_urls = append(exp_urls, ytxmlurl+id)
@@ -31,6 +33,21 @@ func TestLoadpodcastbfile(t *testing.T) {
 
 		if !slices.Equal(channel_ids, exp_ids) {
 			t.Errorf("expectedd %s, got %s instead", channel_ids, exp_ids)
+		}
+	})
+
+}
+
+func TestParsexmlfeed(t *testing.T) {
+	var feed Feed
+	t.Run("read xml feed file", func(t *testing.T) {
+		fh, err := os.ReadFile("testdata/webdrivertorso.xml")
+		if err != nil {
+			t.Errorf("could not read feedxml file: %s", err)
+		}
+		err = xml.Unmarshal(fh, &feed)
+		if err != nil {
+			t.Errorf("error unmarshalling feed file %s", err)
 		}
 	})
 
