@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestLoadpodcastbfile(t *testing.T) {
+func TestLoadpodcastfile(t *testing.T) {
 	exp_ids := []string{"UCsLiV4WJfkTEHH0b9PmRklw", "UC-tLyAaPbRZiYrOJxAGB7dQ", "UC2PA-AKmVpU6NKCGtZq_rKQ"}
 	var exp_urls []string
 	for _, id := range exp_ids {
