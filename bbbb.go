@@ -90,6 +90,10 @@ func create_podcast(items Channels2follow) {
 					Length: chapter.Video.Formats[0].ApproxDurationMs,
 					Type:   "audio/x-mpeg",
 				},
+				Image: &podcasts.ItunesImage{
+					//Href: chapter.Video.Thumbnails[0].URL + ".jpg",
+					Href: "https://www.shutterstock.com/shutterstock/photos/2355208533/display_1500/stock-vector-vector-illustration-of-the-black-and-white-mandala-size-x-px-the-idea-for-design-products-2355208533.jpg",
+				},
 			})
 		}
 		feed, err := p.Feed(
@@ -177,6 +181,13 @@ func removeshorts(pdcsts *[]Podcastitem) []Podcastitem {
 // fill in mp4 fields of Podcastitem; if name if video starts with '-' replace it
 // or cli for ffmpeg fails - it thinks it's a ffmpeg cli switch
 func addmp4link(item *Podcastitem) bool {
+	_, err := os.Open(item.Video.ID + ".mp3")
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Println("mp3 not available, keep running")
+	} else {
+		log.Println("mp3 already available, skipping")
+		return true
+	}
 	video, err := _getsmallessvideo(item.Link, ytclient)
 	if err != nil {
 		premiere, kk := regexp.MatchString("LIVE_STREAM_OFFLINE", err.Error())
@@ -218,7 +229,7 @@ func _getsmallessvideo(videourl string, ytclient youtube.Client) (*youtube.Video
 			log.Println(videourl, " episode not yet published, waiting to be live streamed")
 			return nil, err
 		} else {
-			log.Println(err.Error())
+			log.Println("Error while getting smallest video", videourl, err.Error())
 			return nil, err
 		}
 	}
