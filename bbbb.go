@@ -180,10 +180,26 @@ func removeshorts(pdcsts *[]Podcastitem) []Podcastitem {
 
 // fill in mp4 fields of Podcastitem; if name if video starts with '-' replace it
 // or cli for ffmpeg fails - it thinks it's a ffmpeg cli switch
+// skip titles with #short tag and videos whose duration is 0s
 func addmp4link(item *Podcastitem) bool {
-	_, err := os.Open(item.Video.ID + ".mp3")
+	var err error
+	var zerosec time.Duration
+	zerosec = 0 * time.Second
+	if strings.Contains(item.Title, "#shorts") {
+		return false
+	}
+	if item.Duration == zerosec {
+		return false
+	}
+	if strings.HasPrefix(item.Mp4file, "-") {
+		item.Mp4file = strings.Replace(item.Mp4file, "-", "_", 1)
+		log.Println("do we have this file starting with _: ", item.Mp4file, ".mp3")
+		_, err = os.Open(item.Mp4file + ".mp3")
+	} else {
+		_, err = os.Open(item.Mp4file + ".mp3")
+	}
 	if errors.Is(err, os.ErrNotExist) {
-		fmt.Println("mp3 not available, keep running")
+		log.Println(item.Title, " ", item.Duration, "s not available, keep running")
 	} else {
 		log.Println("mp3 already available, skipping")
 		return true
@@ -362,9 +378,12 @@ func writeshowyaml(show string, pdcsts *[]Podcastitem) error {
 // timestamps on the created files, skip already downloaded files
 // removes mp4 files
 func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, err error) {
+	if strings.HasPrefix(video.ID, "-") {
+		video.ID = strings.Replace(video.ID, "-", "_", 1)
+	}
 	mp3, err := os.Open(video.ID + ".mp3")
 	if errors.Is(err, os.ErrNotExist) {
-		fmt.Println("mp3 not available, keep running")
+		fmt.Println(video.Title, ".mp3 not available, keep running")
 	} else {
 		log.Println("mp3 already available, skipping")
 		_, err := os.Stat(video.ID + ".mp4")
