@@ -183,12 +183,7 @@ func removeshorts(pdcsts *[]Podcastitem) []Podcastitem {
 // skip titles with #short tag and videos whose duration is 0s
 func addmp4link(item *Podcastitem) bool {
 	var err error
-	var zerosec time.Duration
-	zerosec = 0 * time.Second
 	if strings.Contains(item.Title, "#shorts") {
-		return false
-	}
-	if item.Duration == zerosec {
 		return false
 	}
 	if strings.HasPrefix(item.Mp4file, "-") {
