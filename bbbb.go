@@ -172,9 +172,6 @@ func removeshorts(pdcsts *[]Podcastitem) []Podcastitem {
 			longerthan1m = append(longerthan1m, item)
 		}
 	}
-	for _, i := range longerthan1m {
-		fmt.Println(i.Title, " lasts ", i.Duration)
-	}
 	return longerthan1m
 }
 
@@ -196,7 +193,6 @@ func addmp4link(item *Podcastitem) bool {
 	if errors.Is(err, os.ErrNotExist) {
 		log.Println(item.Title, " ", item.Duration, "s not available, keep running")
 	} else {
-		log.Println("mp3 already available, skipping")
 		return true
 	}
 	video, err := _getsmallessvideo(item.Link, ytclient)
@@ -380,7 +376,7 @@ func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, e
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Println(video.Title, ".mp3 not available, keep running")
 	} else {
-		log.Println("mp3 already available, skipping")
+		//log.Println("mp3 already available, skipping")
 		_, err := os.Stat(video.ID + ".mp4")
 		if err == nil {
 			err = os.Remove(video.ID + ".mp4")
@@ -407,23 +403,48 @@ func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, e
 		defer fh.Close()
 		stream, _, err := ytclient.GetStream(video, &video.Formats[0])
 		if err != nil {
+			forbidden, regexerr := regexp.MatchString("unexpected status code: 403", err.Error())
+			if regexerr != nil {
+				log.Println("error matching 403403403: ", regexerr)
+			}
+			if forbidden == true {
+				log.Println("forbidden, retrying...")
+				stream, _, err = ytclient.GetStream(video, &video.Formats[0])
+			}
+		}
+		if err != nil {
 			log.Fatalln("error streaming ", err)
+			err = os.Remove(video.ID + ".mp4")
+			if err != nil {
+				log.Fatalln("could not remove mp4 file", err)
+			}
 			return nil, err
 		}
 		_, err = io.Copy(fh, stream)
 		if err != nil {
 			log.Println("error copying stream to file", err)
-			return nil, err
+			matched, regexerr := regexp.MatchString("403", err.Error())
+			if regexerr != nil {
+				log.Println("error matching regex 403", err)
+			}
+			if matched == true {
+				err = os.Remove(video.ID + ".mp4")
+				if err != nil {
+					log.Fatalln("could not remove mp4 file", err)
+				}
+				log.Fatalln("got a 403 so quit")
+
+			}
 		}
 		log.Printf("%s copied from stream\n", fh.Name())
 		log.Println("File name without ext: ", video.ID)
 		err = _conver2mp3(video.ID+".mp4", video.ID+".mp3")
 		if err != nil {
 			log.Println("error converting to mp3", err)
-		}
-		err = os.Remove(video.ID + ".mp4")
-		if err != nil {
-			log.Println("could not remove mp4 file: ", err)
+			err = os.Remove(video.ID + ".mp4")
+			if err != nil {
+				log.Println("could not remove mp4 file: ", err)
+			}
 		}
 
 	}
