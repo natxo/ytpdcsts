@@ -50,7 +50,6 @@ func process_shows(urls []string) {
 }
 
 // helpers after this
-
 func create_podcast(items Channels2follow) {
 	for _, item := range items.Ytchannels {
 		var dirname string
@@ -393,7 +392,16 @@ func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, e
 		video.ID = strings.Replace(video.ID, "-", "_", 1)
 		log.Println(video.ID)
 	}
-	file, err := os.Open(video.ID + ".mp4")
+	file, err := processmp4(ytclient, video)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	return file, err
+}
+
+func processmp4(ytclient youtube.Client, video *youtube.Video) (file *os.File, err error) {
+	file, err = os.Open(video.ID + ".mp4")
 	if err != nil && os.IsNotExist(err) {
 		fh, err := os.Create(video.ID + ".mp4")
 		if err != nil {
@@ -430,9 +438,11 @@ func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, e
 			if matched == true {
 				err = os.Remove(video.ID + ".mp4")
 				if err != nil {
-					log.Fatalln("could not remove mp4 file", err)
+					log.Println("could not remove mp4 file", err)
+					return nil, err
 				}
-				log.Fatalln("got a 403 so quit")
+				log.Println("got a 403 so quit")
+				return nil, err
 
 			}
 		}
@@ -446,7 +456,6 @@ func dlmp4(ytclient youtube.Client, video *youtube.Video) (videofile *os.File, e
 				log.Println("could not remove mp4 file: ", err)
 			}
 		}
-
 	}
 	return file, err
 }
