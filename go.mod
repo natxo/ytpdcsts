@@ -8,7 +8,7 @@ require (
 	github.com/CallumKerson/podcasts v0.0.5
 	github.com/antchfx/xmlquery v1.4.4
 	github.com/google/uuid v1.6.0
-	github.com/kkdai/youtube/v2 v2.10.3
+	github.com/kkdai/youtube/v2 v2.10.4
 	github.com/mattn/go-sqlite3 v1.14.24
 	gopkg.in/yaml.v3 v3.0.1
 )
