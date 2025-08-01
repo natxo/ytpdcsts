@@ -25,22 +25,26 @@ const ytxmlurl = "https://www.youtube.com/feeds/videos.xml?channel_id="
 var ytclient = youtube.Client{}
 
 func main() {
-	urls, channels, err := loadpodcastsfile("podcasts.yaml")
+	channels, err := loadpodcastsfile("podcasts.yaml")
 	if err != nil {
 		log.Fatalln("could not load the podcast file: ", err)
 	}
+	/*	var urls []string
+		for _, value := range channels.Ytchannels {
+			urls = append(urls, ytxmlurl+value.Channelid)
+		}*/
 
-	process_shows(urls)
+	process_shows(&channels)
 	create_podcast(channels)
 }
 
 // generate yaml files per yt show with the podcasts info
 // downloads mp4 files into channel dirs
-func process_shows(urls []string) {
-	for _, item := range urls {
+func process_shows(channels *Channels2follow) {
+	for _, item := range channels.Ytchannels {
 		// define 3x sets of items
 		var uniqmp4 []Podcastitem
-		ytpdcsts, filefeed, author := fromxmltoyaml(item)
+		ytpdcsts, filefeed, author := fromxmltoyaml(ytxmlurl+item.Channelid, item.Filter)
 		uniqmp4 = createniqueset(ytpdcsts, filefeed)
 		writeshowyaml(author, &uniqmp4)
 		for _, item := range uniqmp4 {
@@ -122,7 +126,7 @@ func create_podcast(items Channels2follow) {
 // author name
 // the 1st set comes from the xml, the second set is from the written yaml file
 // we generate, so we only save info once later
-func fromxmltoyaml(url string) ([]Podcastitem, []Podcastitem, string) {
+func fromxmltoyaml(url, filter string) ([]Podcastitem, []Podcastitem, string) {
 	ytfeed, err := loadxml(url)
 	if err != nil {
 		log.Fatalln("could not load the xml for ", ytfeed.Author.Name, ": ", err)
@@ -131,7 +135,7 @@ func fromxmltoyaml(url string) ([]Podcastitem, []Podcastitem, string) {
 	if err != nil {
 		log.Fatalln("could not read ", ytfeed.Author.Name, err)
 	}
-	return ytpodcastitems(ytfeed), filefeed, ytfeed.Author.Name
+	return ytpodcastitems(ytfeed, filter), filefeed, ytfeed.Author.Name
 
 }
 
@@ -256,7 +260,7 @@ func _getsmallessvideo(videourl string, ytclient youtube.Client) (*youtube.Video
 }
 
 // load podcasts.yaml, return the channel id urls
-func loadpodcastsfile(file string) (urls []string, podcasts Channels2follow, err error) {
+func loadpodcastsfile(file string) (podcasts Channels2follow, err error) {
 	pdcfile, err := os.ReadFile(file)
 	if err != nil {
 		log.Fatalln("could not read ", file, err)
@@ -267,10 +271,7 @@ func loadpodcastsfile(file string) (urls []string, podcasts Channels2follow, err
 		log.Fatalln("could not unmarshal ", file, err)
 	}
 
-	for _, value := range podcasts.Ytchannels {
-		urls = append(urls, ytxmlurl+value.Channelid)
-	}
-	return urls, podcasts, nil
+	return podcasts, nil
 }
 
 func loadxml(url string) (feed Feed, err error) {
@@ -327,17 +328,22 @@ func readshowyaml(show string) (pdcs []Podcastitem, err error) {
 }
 
 // extract []Podcastitem from Feed, yt only gives us the last 15
-func ytpodcastitems(feed Feed) []Podcastitem {
+func ytpodcastitems(feed Feed, filter string) []Podcastitem {
 	var pdcstitems []Podcastitem
 
 	for i := 0; i < len(feed.Entry); i++ {
-		//fmt.Println(feed.Entry[i].Title)
-		item := Podcastitem{
-			Title:     feed.Entry[i].Title,
-			Published: feed.Entry[i].Published,
-			Link:      feed.Entry[i].Link.Href,
+		match, err := regexp.MatchString(filter, feed.Entry[i].Title)
+		if err != nil {
+			log.Fatalln("error matching regex in ", feed.Entry[i].Title, " with ", filter, err)
 		}
-		pdcstitems = append(pdcstitems, item)
+		if match == true {
+			item := Podcastitem{
+				Title:     feed.Entry[i].Title,
+				Published: feed.Entry[i].Published,
+				Link:      feed.Entry[i].Link.Href,
+			}
+			pdcstitems = append(pdcstitems, item)
+		}
 	}
 	return pdcstitems
 }
@@ -569,5 +575,6 @@ type Channels2follow struct {
 		Link        string `yaml:"link"`
 		Language    string `yaml:"language,omitempty"`
 		Description string `yaml:"description,omitempty"`
+		Filter      string `yaml:"filter,omitempty"`
 	} `yaml:"ytchannels"`
 }
