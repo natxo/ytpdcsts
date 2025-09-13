@@ -479,8 +479,16 @@ func _conver2mp3(mp4file, mp3file string) error {
 	}
 	if f.Size() < int64(4000000) {
 		log.Printf("%s seems too small: %d, wrong conversion?\n", f.Name(), f.Size())
-		log.Println("re-running ffmpeg again ....")
-		_conver2mp3(mp4file, mp3file)
+		log.Println("deleting files...", mp3file, mp4file)
+		err := os.Remove(mp4file)
+		if err != nil {
+			log.Fatalln("error removing mp4: ", err)
+		}
+		err = os.Remove(mp3file)
+		if err != nil {
+			log.Fatalln("error removing mp3: ", err)
+		}
+		os.Exit(0)
 	}
 	return nil
 }
