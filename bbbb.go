@@ -208,6 +208,15 @@ func addmp4link(item *Podcastitem) bool {
 			log.Println("episode not yet published, waiting to be live streamed")
 			return true
 		}
+		short, kk := regexp.MatchString("sorry", err.Error())
+		if kk != nil {
+			log.Println("error matching short: ", kk)
+
+		}
+		if short == true {
+			log.Println("Probably short video, skipping")
+			return true
+		}
 	}
 	if strings.HasPrefix(video.ID, "-") {
 		item.Mp4file = strings.Replace(video.ID, "-", "_", 1)
@@ -332,6 +341,14 @@ func ytpodcastitems(feed Feed, filter string) []Podcastitem {
 	var pdcstitems []Podcastitem
 
 	for i := 0; i < len(feed.Entry); i++ {
+		// skip shorts
+		short, err := regexp.MatchString("shorts", feed.Entry[i].Link.Href)
+		if err != nil {
+			log.Println("error matching regexp for shorts")
+		}
+		if short == true {
+			continue
+		}
 		match, err := regexp.MatchString(filter, feed.Entry[i].Title)
 		if err != nil {
 			log.Fatalln("error matching regex in ", feed.Entry[i].Title, " with ", filter, err)
@@ -477,7 +494,7 @@ func _conver2mp3(mp4file, mp3file string) error {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	if f.Size() < int64(4000000) {
+	if f.Size() < int64(400000) {
 		log.Printf("%s seems too small: %d, wrong conversion?\n", f.Name(), f.Size())
 		log.Println("deleting files...", mp3file, mp4file)
 		err := os.Remove(mp4file)
